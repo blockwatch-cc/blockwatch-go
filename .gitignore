@@ -1,0 +1,31 @@
+blockwatch
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+
+# Compiled Dynamic libraries
+*.so
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+
+# Key files
+*.key
+*.csr
+*.crt
+
+# OSX specific files
+.DS_Store
+
+# generated files and directories
+*.html.js
+build/*
+node_modules/
+*.log
+*.pid
+*~
+docs/public
