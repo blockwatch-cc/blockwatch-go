@@ -1,5 +1,5 @@
-// Copyright (c) 2019 KIDTSUNAMI
-// Author: alex@kidtsunami.com
+// Copyright (c) 2020 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
 
 package blockwatch
 
@@ -38,6 +38,9 @@ func (r Row) Dataframe() *Dataframe {
 }
 
 func (r Row) Column(name string) (int, interface{}, error) {
+	if err := r.data.initType(nil); err != nil {
+		return -1, nil, err
+	}
 	col := r.data.columnIndex(name)
 	if col < 0 {
 		return -1, nil, fmt.Errorf("blockwatch: missing column '%s'", name)
@@ -46,21 +49,10 @@ func (r Row) Column(name string) (int, interface{}, error) {
 	return col, v, err
 }
 
-func (t *Dataframe) ResetType() {
-	t.tinfo = nil
-	t.colmap = nil
-}
-
 func (t *Dataframe) DecodeAt(row int, val interface{}) error {
 	if t.tinfo == nil {
-		var err error
-		t.tinfo, err = getTypeInfo(val)
-		if err != nil {
+		if err := t.initType(val); err != nil {
 			return err
-		}
-		t.colmap = make(map[string]int, len(t.Columns))
-		for i, v := range t.Columns {
-			t.colmap[v.Code] = i
 		}
 	}
 	return t.decodeAt(row, val, t.tinfo)
@@ -106,6 +98,9 @@ func (t *Dataframe) ForEach(fn func(r Row) error) error {
 }
 
 func (t *Dataframe) Column(name string) (int, interface{}, error) {
+	if err := t.initType(nil); err != nil {
+		return -1, nil, err
+	}
 	i := t.columnIndex(name)
 	if i < 0 {
 		return -1, nil, fmt.Errorf("blockwatch: missing column '%s'", name)
@@ -138,6 +133,11 @@ func (t *Dataframe) Column(name string) (int, interface{}, error) {
 	}
 }
 
+func (t *Dataframe) ResetType() {
+	t.tinfo = nil
+	t.colmap = nil
+}
+
 func (t *Dataframe) columnIndex(name string) int {
 	if i, ok := t.colmap[name]; ok {
 		return i
@@ -145,11 +145,32 @@ func (t *Dataframe) columnIndex(name string) int {
 	return -1
 }
 
+func (t *Dataframe) initType(val interface{}) error {
+	var err error
+	if t.tinfo == nil && val != nil {
+		t.tinfo, err = getTypeInfo(val)
+		if err != nil {
+			return err
+		}
+	}
+	if t.colmap == nil {
+		t.colmap = make(map[string]int, len(t.Columns))
+		for i, v := range t.Columns {
+			t.colmap[v.Code] = i
+		}
+	}
+	return nil
+}
+
 func (t *Dataframe) decodeAt(pos int, val interface{}, tinfo *typeInfo) error {
 	if len(t.Data) <= pos {
 		return fmt.Errorf("blockwatch: invalid table row %d > len %d", pos, len(t.Data))
 	}
-	v := derefValue(reflect.ValueOf(val))
+	vv := reflect.ValueOf(val)
+	if vv.Kind() != reflect.Ptr {
+		return fmt.Errorf("blockwatch: '%s' must be a pointer type", reflect.TypeOf(val))
+	}
+	v := derefValue(vv)
 	if !v.IsValid() {
 		return fmt.Errorf("blockwatch: invalid value of type %T", v)
 	}
@@ -371,8 +392,7 @@ func (t *Dataframe) decodeTimeColumn(col int, name string) ([]time.Time, error) 
 
 func (t *Dataframe) decodeInt64At(col, row int, name string) (int64, error) {
 	// strip JSON array delimiters
-	v := t.Data[row]
-	v = v[1 : len(v)-1]
+	v := stripArray(t.Data[row][:])
 
 	// find the n-th column separated by comma
 	start, end := indexByteColumnN(v, ',', col)
@@ -388,8 +408,7 @@ func (t *Dataframe) decodeInt64At(col, row int, name string) (int64, error) {
 
 func (t *Dataframe) decodeUint64At(col, row int, name string) (uint64, error) {
 	// strip JSON array delimiters
-	v := t.Data[row]
-	v = v[1 : len(v)-1]
+	v := stripArray(t.Data[row][:])
 
 	// find the n-th column separated by comma
 	start, end := indexByteColumnN(v, ',', col)
@@ -405,8 +424,7 @@ func (t *Dataframe) decodeUint64At(col, row int, name string) (uint64, error) {
 
 func (t *Dataframe) decodeFloat64At(col, row int, name string) (float64, error) {
 	// strip JSON array delimiters
-	v := t.Data[row]
-	v = v[1 : len(v)-1]
+	v := stripArray(t.Data[row][:])
 
 	// find the n-th column separated by comma
 	start, end := indexByteColumnN(v, ',', col)
@@ -422,8 +440,7 @@ func (t *Dataframe) decodeFloat64At(col, row int, name string) (float64, error) 
 
 func (t *Dataframe) decodeStringAt(col, row int, name string) (string, error) {
 	// strip JSON array delimiters
-	v := t.Data[row]
-	v = v[1 : len(v)-1]
+	v := stripArray(t.Data[row][:])
 
 	// find the n-th column separated by comma
 	start, end := indexByteColumnN(v, ',', col)
@@ -439,8 +456,7 @@ func (t *Dataframe) decodeStringAt(col, row int, name string) (string, error) {
 
 func (t *Dataframe) decodeBytesAt(col, row int, name string) ([]byte, error) {
 	// strip JSON array delimiters
-	v := t.Data[row]
-	v = v[1 : len(v)-1]
+	v := stripArray(t.Data[row][:])
 
 	// find the n-th column separated by comma
 	start, end := indexByteColumnN(v, ',', col)
@@ -460,8 +476,7 @@ func (t *Dataframe) decodeBytesAt(col, row int, name string) ([]byte, error) {
 
 func (t *Dataframe) decodeBoolAt(col, row int, name string) (bool, error) {
 	// strip JSON array delimiters
-	v := t.Data[row]
-	v = v[1 : len(v)-1]
+	v := stripArray(t.Data[row][:])
 
 	// find the n-th column separated by comma
 	start, end := indexByteColumnN(v, ',', col)
@@ -477,8 +492,7 @@ func (t *Dataframe) decodeBoolAt(col, row int, name string) (bool, error) {
 
 func (t *Dataframe) decodeTimeAt(col, row int, name string) (time.Time, error) {
 	// strip JSON array delimiters
-	v := t.Data[row]
-	v = v[1 : len(v)-1]
+	v := stripArray(t.Data[row][:])
 
 	// find the n-th column separated by comma
 	start, end := indexByteColumnN(v, ',', col)
@@ -487,10 +501,18 @@ func (t *Dataframe) decodeTimeAt(col, row int, name string) (time.Time, error) {
 	}
 	val, err := strconv.ParseInt(string(v[start:end]), 10, 64)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("blockwatch: cannot decode column %s [%d:%d]: %v",
+		return time.Time{}, fmt.Errorf("blockwatch: cannot decode time column %s [%d:%d]: %v",
 			name, col, row, err)
 	}
 	return time.Unix(0, val*1000000).UTC(), nil
+}
+
+func stripArray(data []byte) []byte {
+	end := len(data) - 2
+	if end >= 0 && data[end] == ',' {
+		end--
+	}
+	return data[1:end]
 }
 
 func makeFieldError(name string, val reflect.Value, err error) error {
