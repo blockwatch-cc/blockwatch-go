@@ -2,7 +2,7 @@
 
 The official [Blockwatch](https://blockwatch.cc) Go client library.
 
-To use this SDK you need a free API key and a free or payed database subscription.
+To use this SDK you need a free Blockwatch API key and a free or paid database subscription.
 
 ### Installation
 
@@ -81,7 +81,7 @@ type ConnConfig struct {
 
 ### Listing Databases
 
-To fetch a list of all databases you're currently subscribed to, call:
+To fetch a list of all databases you're currently subscribed to, call
 
 ```go
 dbs, err := c.ListDatabases(ctx, blockwatch.DatabaseListParams{})
@@ -107,7 +107,7 @@ The Blockwatch Data API supports two different kinds of datasets, **tables** and
 
 Time series may contain at most one row of entries per unique timestamp. They have a default sampling frequency, are naturally ordered by timestamp and you may only filter them by time in most cases. You can request a different frequency using the `collapse` parameter in which case rows will be automatically aggregated by time.
 
-Tables can contain arbitrary data and are are ordered by a primary key, in most cases a unique row id. Usually you can filter tables by most of their columns. Please consult the dataset spec for details on which data fields are filterable.
+Tables can contain arbitrary data and are ordered by a primary key, in most cases a unique row id. Usually you can filter tables by most of their columns. Please consult the dataset spec for details on which data fields are filterable.
 
 The SDK keeps the raw data response and lazy-unmarshals data rows or columns only when accessed.
 
